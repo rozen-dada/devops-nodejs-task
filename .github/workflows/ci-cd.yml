@@ -1,35 +1,62 @@
-name: CI/CD for react Todo 
+name: CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
-  # Build Job
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Install Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18.x
+    - name: Run ESLint
+      run: npx eslint .
 
-      - name: Install Dependencies
-        run: |
-          cd todo
-          npm install
+    - name: Build Docker image
+      run: docker build -t ${{ github.repository }}:${{ github.sha }} .
 
-      - name: Build Project
-        run: |
-          cd todo
-          npm run build
+    - name: Docker image scan
+      uses: anchore/scan-action@v2
+      with:
+        image: ${{ github.repository }}:${{ github.sha }}
 
-      - name: Upload artifact to enable deployment
-        uses: actions/upload-artifact@v3
-        with:
-          name: poduction file
-          path: ./todo/build
+    - name: Log in to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v1
+      with:
+        region: ${{ secrets.AWS_REGION }}
+        access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Push to Amazon ECR
+      run: |
+        docker tag ${{ github.repository }}:${{ github.sha }} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ github.repository }}:${{ github.sha }}
+        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ github.repository }}:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Apply
+      run: terraform apply -auto-approve
+      working-directory: ./ecs-terraform
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}

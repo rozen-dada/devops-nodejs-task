@@ -13,6 +13,11 @@ data "template_file" "cb_app" {
   }
 }
 
+# Define the ECR repository
+resource "aws_ecr_repository" "my_app" {
+  name = "my-app"
+}
+
 resource "aws_ecs_task_definition" "app" {
   family                   = "cb-app-task"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn

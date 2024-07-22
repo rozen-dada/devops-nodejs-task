@@ -5,13 +5,13 @@ variable "az_count" {
 
 variable "app_port" {
   description = "Port exposed by the docker image to redirect traffic to"
-  default     = 3000
+  default     = 80
 
 }
 
 variable "app_image" {
   description = "Docker image to run in the ECS cluster"
-  default     = "bradfordhamilton/crystal_blockchain:latest"
+  default     = "${aws_ecr_repository.my-app.repository_url}:latest"
 }
 
 variable "app_count" {
