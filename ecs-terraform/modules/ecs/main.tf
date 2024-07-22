@@ -1,9 +1,9 @@
 resource "aws_ecs_cluster" "main" {
-  name = "cb-cluster"
+  name = var.ecs_cluster_name
 }
 
 data "template_file" "cb_app" {
-  template = file("./templates/ecs/cb_app.json.tpl")
+  template = file(var.template_file_path)
 
   vars = {
     app_image      = var.app_image
@@ -15,12 +15,12 @@ data "template_file" "cb_app" {
 
 # Define the ECR repository
 resource "aws_ecr_repository" "my_app" {
-  name = "my-app"
+  name = var.ecr_repository_name
 }
 
 resource "aws_ecs_task_definition" "app" {
-  family                   = "cb-app-task"
-  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  family                   = var.ecs_task_family
+  execution_role_arn       = var.execution_role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.fargate_cpu
@@ -29,23 +29,23 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 resource "aws_ecs_service" "main" {
-  name            = "cb-service"
+  name            = var.ecs_service_name
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.app_count
   launch_type     = "FARGATE"
 
   network_configuration {
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    subnets          = aws_subnet.private.*.id
+    security_groups  = var.ecs_security_groups
+    subnets          = var.ecs_subnets
     assign_public_ip = true
   }
 
   load_balancer {
-    target_group_arn = aws_alb_target_group.app.id
+    target_group_arn = var.target_group_arn
     container_name   = "cb-app"
     container_port   = var.app_port
   }
 
-  depends_on = [aws_alb_listener.front_end, aws_iam_role_policy_attachment.ecs-task-execution-role-policy-attachment]
+  depends_on = var.ecs_service_dependencies
 }
